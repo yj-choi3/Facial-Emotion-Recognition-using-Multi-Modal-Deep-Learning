@@ -2,7 +2,7 @@
 
 # 🎭 Facial Emotion Recognition using Multi-Modal Deep Learning
 
-> **2023 Undergraduate Graduation Project**  
+> **2023 Undergraduate Project**  
 > A multi-modal emotion recognition system combining facial images, landmarks, and depth features (Z-Values)
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
