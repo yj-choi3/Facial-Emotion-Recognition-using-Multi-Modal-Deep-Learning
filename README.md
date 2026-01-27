@@ -167,6 +167,48 @@ for _ in range(3):
 
 ---
 
+## 🧪 Experiments & Results
+
+### Overall Performance
+
+| Model | Test Loss | Accuracy | Precision | Recall | F1 Score | ROC-AUC |
+|-------|-----------|----------|-----------|--------|----------|---------|
+| **Image & Landmark & ZValue** | **0.161** | **0.718** | **0.705** | **0.712** | **0.707** | **0.930** |
+| Image & ZValue | 0.172 | 0.705 | 0.701 | 0.699 | 0.696 | 0.927 |
+| Image & Landmark | 0.171 | 0.707 | 0.696 | 0.701 | 0.695 | 0.926 |
+| Image Only | 0.143 | 0.695 | 0.677 | 0.687 | 0.674 | 0.923 |
+| ResNet50 | 0.162 | 0.650 | 0.635 | 0.643 | 0.631 | 0.906 |
+| EfficientNetB7 | 0.184 | 0.647 | 0.643 | 0.640 | 0.637 | 0.899 |
+| EfficientNetB0 | 0.187 | 0.625 | 0.603 | 0.618 | 0.604 | 0.889 |
+| MobileNet | 0.178 | 0.620 | 0.600 | 0.616 | 0.604 | 0.891 |
+| Z-Value Only | 0.229 | 0.499 | 0.468 | 0.491 | 0.466 | 0.816 |
+| VGGNet16 | 0.279 | 0.424 | 0.398 | 0.418 | 0.395 | 0.758 |
+| VGGNet19 | 0.279 | 0.406 | 0.380 | 0.399 | 0.381 | 0.757 |
+| Landmark & ZValue | 0.257 | 0.414 | 0.448 | 0.419 | 0.393 | 0.803 |
+| Landmark Only | 0.279 | 0.373 | 0.369 | 0.379 | 0.313 | 0.799 |
+
+### Per-Emotion Accuracy (Best Model: Image & Landmark & ZValue)
+
+| Emotion | Accuracy |
+|---------|----------|
+| Happy | 97.1% |
+| Neutral | 90.3% |
+| Anger | 72.8% |
+| Surprise | 77.4% |
+| Sad | 69.5% |
+| Fear | 51.0% |
+| Disgust | 40.3% |
+
+### Key Findings
+
+1. **Best Model**: Image & Landmark & ZValue (71.8% accuracy, 0.930 ROC-AUC)
+2. **Multi-modal > Single-modal**: Combining all three inputs outperforms single inputs
+3. **Custom CNN > Transfer Learning**: Custom architecture beats VGG, ResNet, MobileNet
+4. **Easy emotions**: Happy (97%), Neutral (90%) - highest accuracy
+5. **Hard emotions**: Disgust (40%), Fear (51%) - lowest accuracy
+
+---
+
 ## ⚙️ Training Configuration
 
 ```python
@@ -200,8 +242,6 @@ Dropout: 0.2-0.6
 - **Confusion Matrix**
 - **Precision-Recall Curve**
 
----
-
 ## 🚀 Getting Started
 
 ### Installation
@@ -226,6 +266,7 @@ python preprocessing.py
 # Run model training
 python train.py
 ```
+
 
 ---
 
