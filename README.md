@@ -336,6 +336,3 @@ Each model generates:
 
 ---
 
-<p align="center">
-  <i>🎓 2023 Graduation Project</i>
-</p>
