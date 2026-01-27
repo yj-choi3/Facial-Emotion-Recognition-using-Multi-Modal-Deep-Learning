@@ -325,13 +325,7 @@ Each model generates:
 
 ## 👥 Contributors
 
-- 2023 Undergraduate Graduation Project
-
----
-
-## 📄 License
-
-MIT License
+- 2023 Undergraduate  Project
 
 ---
 
