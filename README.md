@@ -1,4 +1,3 @@
-# Facial-Emotion-Recognition-using-Multi-Modal-Deep-Learning
 
 # 🎭 Facial Emotion Recognition using Multi-Modal Deep Learning
 
