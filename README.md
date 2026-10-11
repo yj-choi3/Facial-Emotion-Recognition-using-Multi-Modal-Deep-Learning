@@ -1,33 +1,26 @@
+# 🎭 Facial Emotion Recognition using Multi-Input Deep Learning
 
-# 🎭 Facial Emotion Recognition using Multi-Modal Deep Learning
+**Multi-input CNN for Korean facial emotion classification**
+Undergraduate research project, Ewha Womans University (2023–2025)
 
-> **2023 Undergraduate Project**  
-> A multi-modal emotion recognition system combining facial images, landmarks, and depth features (Z-Values)
-
-[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
-[![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-orange.svg)](https://tensorflow.org/)
-[![Google Colab](https://img.shields.io/badge/Google%20Colab-Supported-yellow.svg)](https://colab.research.google.com/)
-
----
+![Python](https://img.shields.io/badge/Python-3.10-blue) ![TensorFlow](https://img.shields.io/badge/TensorFlow-Keras-orange) ![Colab](https://img.shields.io/badge/Google-Colab-yellow)
 
 ## 📌 Overview
 
-This project implements a deep learning-based facial emotion recognition system that classifies **7 emotions** from facial expression images using a multi-modal approach.
+The model classifies 7 emotions from a face image. It fuses three inputs:
 
-### Key Features
+1. **Image**: 64×64 grayscale face crop
+2. **Landmarks**: 101 key MediaPipe FaceMesh points (x, y, z → 303 features)
+3. **Z-features**: 8 geometric ratios between landmark distances, expanded to 56 features
 
-- **Multi-Modal Learning**: Combines image features, facial landmark coordinates, and Z-value depth information
-- **MediaPipe Integration**: Automated face detection and 468 landmark extraction
-- **Multiple Model Architectures**: Custom CNN with Residual Blocks, VGG16/19, ResNet50, MobileNet
-- **Class Imbalance Handling**: Focal Loss and RandomOverSampler
-- **Real-time Demo**: Browser-based webcam emotion recognition
+The best model, **Image + Landmark + Z**, reaches **71.8% accuracy, macro F1 0.707 and ROC-AUC 0.930** on a held-out test set of 4,742 images. That beats an image-only CNN (69.5%) and ImageNet-pretrained backbones (≤ 65.0%).
 
----
+The project was originally motivated by expression-feedback tools for people with alexithymia.
 
 ## 🎯 Emotion Classes
 
 | Label | Emotion |
-|:-----:|:--------|
+|---|---|
 | 0 | Happy |
 | 1 | Sad |
 | 2 | Anger |
@@ -36,302 +29,175 @@ This project implements a deep learning-based facial emotion recognition system 
 | 5 | Neutral |
 | 6 | Fear |
 
----
-
 ## 📊 Dataset
 
-- **Training samples**: ~71,002
-- **Format**: TFRecord for efficient I/O
-- **Image size**: 64×64 grayscale
+- **Source:** AI Hub Korean emotion image dataset (한국인 감정인식을 위한 복합영상)
+- **Split:** each emotion was split 75 / 15 / 10 (train / val / test). Only the training set was then augmented offline, with one augmented copy per original image, which doubled it.
+- **Final sizes:** Train 71,002 · Val 7,099 · Test 4,742 (total 82,843). Images whose landmarks could not be extracted were dropped.
 
-### TFRecord Structure
+| Emotion | Train | Val | Test |
+|---|---|---|---|
+| Happy | 11,251 | 1,123 | 753 |
+| Sad | 10,058 | 1,003 | 669 |
+| Anger | 9,863 | 986 | 659 |
+| Surprise | 8,858 | 887 | 592 |
+| Disgust | 10,485 | 1,049 | 702 |
+| Neutral | 11,051 | 1,106 | 739 |
+| Fear | 9,436 | 945 | 628 |
+
+The data is stored as TFRecord:
+
 ```python
 features = {
-    "image": tf.io.FixedLenFeature([], tf.string),      # JPEG encoded image
-    "landmarks": tf.io.VarLenFeature(tf.float32),       # 468 × 3 landmarks
-    "label": tf.io.FixedLenFeature([], tf.int64),       # Emotion label (0-6)
-    "z_values": tf.io.FixedLenFeature([8], tf.float32), # Depth features
+    "image":     tf.io.FixedLenFeature([], tf.string),   # JPEG-encoded face crop
+    "landmarks": tf.io.VarLenFeature(tf.float32),        # 468 x 3 FaceMesh landmarks
+    "label":     tf.io.FixedLenFeature([], tf.int64),    # 0-6
+    "z_values":  tf.io.FixedLenFeature([8], tf.float32), # 8 distance ratios
 }
 ```
 
----
-
 ## 🔧 Preprocessing Pipeline
 
-### 1. Face Detection & Cropping
-- MediaPipe Face Detection with confidence threshold 0.2
-- Face region + 10% margin → resize to 64×64
-
-### 2. Landmark Extraction
-Extracts **101 key landmarks** from 9 facial regions using MediaPipe FaceMesh:
-- Eyebrows (left/right)
-- Eyes (left/right)
-- Lips (inner/outer)
-- Face contour
-- Nose & nose bridge
-
-### 3. Z-Value Feature Engineering
-```python
-# Combines 8 depth values into 56 features using combinations
-z_combinations = list(itertools.combinations(range(8), 3))  # C(8,3) = 56
-```
-
-### 4. Data Augmentation
-```python
-image = tf.image.random_flip_left_right(image)
-image = tf.image.random_brightness(image, max_delta=0.1)
-image = tf.image.random_contrast(image, lower=0.8, upper=1.2)
-```
-
----
+1. **Face detection and alignment.** MediaPipe Face Detection (confidence 0.2) finds the face. The image is rotated so the eyes are level, then cropped and resized to 64×64 grayscale.
+2. **Split.** Each emotion is split 75 / 15 / 10.
+3. **Augmentation (train only).** `ImageDataGenerator` with rotation 5°, zoom 0.05, shift 0.05, horizontal flip and brightness 0.8–1.2. One augmented copy is made per image.
+4. **Landmarks.** MediaPipe FaceMesh gives 468 points. 101 key points are kept from the eyebrows, eyes, inner and outer lips, nose and nose bridge, giving 303 values.
+5. **Z-features.** These are not depth values. They are 8 scale-invariant ratios of Euclidean distances between landmark pairs (z1, z2, z3, z5–z9), for example:
+   ```python
+   z1 = dist(lm[78], lm[308]) / dist(lm[14], lm[13])    # mouth width / mouth opening
+   z2 = dist(lm[33], lm[133]) / dist(lm[160], lm[144])  # eye width / eye opening
+   ```
+   The 8 ratios are expanded into 56 features by taking the product of every 3-combination:
+   ```python
+   z_combinations = list(itertools.combinations(range(8), 3))  # C(8,3) = 56
+   z_feat = [tf.reduce_prod(tf.gather(z, list(c))) for c in z_combinations]
+   ```
 
 ## 🏗️ Model Architecture
 
-### Main Model: Multi-Modal Fusion (Image + Landmark + Z-Value)
-
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        INPUT LAYER                           │
-├─────────────────┬───────────────────┬───────────────────────┤
-│  Image Input    │  Landmark Input   │    Z-Value Input      │
-│   (64,64,1)     │      (303,)       │        (56,)          │
-└────────┬────────┴─────────┬─────────┴───────────┬───────────┘
-         │                  │                     │
-         ▼                  ▼                     ▼
-   ┌───────────┐      ┌───────────┐        ┌───────────┐
-   │   IMAGE   │      │ LANDMARK  │        │  Z-VALUE  │
-   │  SUBNET   │      │  SUBNET   │        │  SUBNET   │
-   ├───────────┤      ├───────────┤        ├───────────┤
-   │ Conv(64)  │      │ Dense(101)│        │ Dense(101)│
-   │ Conv(128) │      │ Dense(64) │        │ BN → ELU  │
-   │ ResBlock  │      │ Dense(32) │        │ Dropout   │
-   │   ×3      │      │ +BN,ELU   │        └─────┬─────┘
-   │ Conv(512) │      │ +Dropout  │              │
-   │ Flatten   │      └─────┬─────┘              │
-   └─────┬─────┘            │                    │
-         │                  │                    │
-         └────────┬─────────┘                    │
-                  ▼                              │
-           ┌────────────┐                        │
-           │ Concatenate│ ◄──────────────────────┘
-           └──────┬─────┘
-                  ▼
-           ┌────────────┐
-           │ Dense(128) │
-           │ BN → ELU   │
-           │ Dropout    │
-           └──────┬─────┘
-                  ▼
-           ┌────────────┐
-           │ Dense(7)   │
-           │ Softmax    │
-           └────────────┘
+Image (64×64×1)                     Landmarks (303)            Z-features (56)
+  Conv64-BN-ReLU-MaxPool-Drop0.2      Dense101                   Dense101
+  Conv128-BN-ReLU-MaxPool-Drop0.2     Dense64                    BN → ELU
+  Residual block ×3 (Conv256×2,       Dense32                    Dropout 0.2
+    1×1 projection shortcut)          (BN, ELU, Dropout 0.3)
+  MaxPool, Conv512×2, MaxPool,
+  Dropout 0.5, Flatten
+          └──────── Concatenate ────────┘                            │
+                         └──────────── Concatenate ─────────────────┘
+                                   Dense128 → BN → ELU → Dropout 0.5
+                                   Dense7 → Softmax
 ```
 
-### Image Subnet Details
-- **Conv2D layers**: 64 → 128 → 256 (×3 Residual Blocks) → 512
-- **Regularization**: BatchNorm, Dropout (0.2-0.5), L2
-- **Activation**: ReLU
-
-### Residual Block
-```python
-for _ in range(3):
-    shortcut = x
-    x = Conv2D(256, (3,3), padding='same')(x)
-    x = BatchNormalization()(x)
-    x = Activation('relu')(x)
-    x = Conv2D(256, (3,3), padding='same')(x)
-    x = BatchNormalization()(x)
-    shortcut = Conv2D(256, (1,1))(shortcut)  # Projection
-    x = Add()([x, shortcut])
-    x = Activation('relu')(x)
-```
-
----
-
-## 🧪 Experiments
-
-### Model Variants Tested
-
-| Category | Model | Input |
-|----------|-------|-------|
-| Single Input | Image Only | (64,64,1) |
-| Single Input | Landmark Only | (303,) |
-| Single Input | Z-Value Only | (56,) |
-| Multi-Modal | Image + Landmark | 2 branches |
-| Multi-Modal | Image + Landmark + Z-Value | 3 branches |
-| Transfer Learning | VGG16, VGG19 | ImageNet pretrained |
-| Transfer Learning | ResNet50, MobileNet | ImageNet pretrained |
-
----
-
-## 🧪 Experiments & Results
-
-### Overall Performance
-
-| Model | Test Loss | Accuracy | Precision | Recall | F1 Score | ROC-AUC |
-|-------|-----------|----------|-----------|--------|----------|---------|
-| **Image & Landmark & ZValue** | **0.161** | **0.718** | **0.705** | **0.712** | **0.707** | **0.930** |
-| Image & ZValue | 0.172 | 0.705 | 0.701 | 0.699 | 0.696 | 0.927 |
-| Image & Landmark | 0.171 | 0.707 | 0.696 | 0.701 | 0.695 | 0.926 |
-| Image Only | 0.143 | 0.695 | 0.677 | 0.687 | 0.674 | 0.923 |
-| ResNet50 | 0.162 | 0.650 | 0.635 | 0.643 | 0.631 | 0.906 |
-| EfficientNetB7 | 0.184 | 0.647 | 0.643 | 0.640 | 0.637 | 0.899 |
-| EfficientNetB0 | 0.187 | 0.625 | 0.603 | 0.618 | 0.604 | 0.889 |
-| MobileNet | 0.178 | 0.620 | 0.600 | 0.616 | 0.604 | 0.891 |
-| Z-Value Only | 0.229 | 0.499 | 0.468 | 0.491 | 0.466 | 0.816 |
-| VGGNet16 | 0.279 | 0.424 | 0.398 | 0.418 | 0.395 | 0.758 |
-| VGGNet19 | 0.279 | 0.406 | 0.380 | 0.399 | 0.381 | 0.757 |
-| Landmark & ZValue | 0.257 | 0.414 | 0.448 | 0.419 | 0.393 | 0.803 |
-| Landmark Only | 0.279 | 0.373 | 0.369 | 0.379 | 0.313 | 0.799 |
-
-### Per-Emotion Accuracy (Best Model: Image & Landmark & ZValue)
-
-| Emotion | Accuracy |
-|---------|----------|
-| Happy | 97.1% |
-| Neutral | 90.3% |
-| Anger | 72.8% |
-| Surprise | 77.4% |
-| Sad | 69.5% |
-| Fear | 51.0% |
-| Disgust | 40.3% |
-
-### Key Findings
-
-1. **Best Model**: Image & Landmark & ZValue (71.8% accuracy, 0.930 ROC-AUC)
-2. **Multi-modal > Single-modal**: Combining all three inputs outperforms single inputs
-3. **Custom CNN > Transfer Learning**: Custom architecture beats VGG, ResNet, MobileNet
-4. **Easy emotions**: Happy (97%), Neutral (90%) - highest accuracy
-5. **Hard emotions**: Disgust (40%), Fear (51%) - lowest accuracy
-
----
+The model has 8,152,124 parameters in total.
 
 ## ⚙️ Training Configuration
 
 ```python
-# Reproducibility
 seed = 42
-
-# Training
-epochs = 100-200
+epochs = 100
 batch_size = 32
 learning_rate = 5e-4
+optimizer = "Adam"  # TODO: verify (the saved model reports RMSprop)
 
-# Callbacks
-EarlyStopping(patience=10, restore_best_weights=True)
-ReduceLROnPlateau(factor=0.5, patience=5, min_lr=1e-6)
-
-# Loss Function: Focal Loss (for class imbalance)
-focal_loss(gamma=2.0, alpha=0.25)
-
-# Regularization
-L2(0.001) for hidden layers
-Dropout: 0.2-0.6
+loss = focal_loss(gamma=2.0, alpha=0.25)
+callbacks = [
+    EarlyStopping(patience=10, restore_best_weights=True),
+    ReduceLROnPlateau(factor=0.5, patience=5, min_lr=1e-6),
+]
+# L2 regularization on hidden layers; dropout 0.2–0.5
 ```
 
----
+## 🧪 Results (test set, n = 4,742)
 
-## 📈 Evaluation Metrics
+### Input combinations and baselines
 
-- **Accuracy**: Overall and per-emotion
-- **Precision / Recall / F1 Score** (Macro average)
-- **ROC-AUC** (One-vs-Rest)
-- **Confusion Matrix**
-- **Precision-Recall Curve**
+| Model | Accuracy | Precision | Recall | F1 | ROC-AUC |
+|---|---|---|---|---|---|
+| **Image + Landmark + Z (proposed)** | **0.718** | **0.705** | **0.712** | **0.707** | **0.930** |
+| Image + Landmark | 0.707 | 0.696 | 0.701 | 0.695 | 0.926 |
+| Image + Z | 0.705 | 0.701 | 0.699 | 0.696 | 0.927 |
+| Image only | 0.695 | 0.677 | 0.687 | 0.674 | 0.923 |
+| Z only | 0.499 | 0.468 | 0.491 | 0.466 | 0.816 |
+| Landmark + Z | 0.414 | 0.448 | 0.419 | 0.393 | 0.803 |
+| Landmark only | 0.373 | 0.369 | 0.379 | 0.313 | 0.799 |
+| ResNet50 (ImageNet) | 0.650 | 0.635 | 0.643 | 0.631 | 0.906 |
+| EfficientNetB7 | 0.647 | 0.643 | 0.640 | 0.637 | 0.899 |
+| EfficientNetB0 | 0.625 | 0.603 | 0.618 | 0.604 | 0.889 |
+| MobileNet | 0.620 | 0.600 | 0.616 | 0.604 | 0.891 |
+| ViT (HF `vit-base-patch16-224-in21k`) | 0.527 | 0.510 | 0.517 | 0.505 | 0.837 |
+| VGG16 | 0.424 | 0.398 | 0.418 | 0.395 | 0.758 |
+| VGG19 | 0.406 | 0.380 | 0.399 | 0.381 | 0.757 |
+| Transformer (from scratch) | 0.397 | 0.355 | 0.389 | 0.360 | 0.749 |
+| CLIP (zero-shot) | 0.332 | 0.485 | 0.317 | 0.238 | 0.738 |
 
-## 🚀 Getting Started
+Precision, recall and F1 are macro averages. ROC-AUC is one-vs-rest.
 
-### Installation
-```bash
-pip install tensorflow>=2.10.0 mediapipe opencv-python
-pip install imbalanced-learn scikit-learn
-pip install matplotlib seaborn pandas
-```
+<p align="center">
+  <img src="results/figures/proposed_confusion_matrix.png" width="48%">
+  <img src="results/figures/proposed_roc_curve.png" width="48%">
+</p>
 
-### Running on Google Colab (Recommended)
-```python
-from google.colab import drive
-drive.mount('/content/drive')
-!pip install mediapipe imblearn
-```
+### Per-emotion accuracy (proposed model)
 
-### Training
-```python
-# Run preprocessing
-python preprocessing.py
+| Happy | Neutral | Surprise | Anger | Sad | Fear | Disgust |
+|---|---|---|---|---|---|---|
+| 97.1% | 90.3% | 77.4% | 72.8% | 69.5% | 51.0% | 40.3% |
 
-# Run model training
-python train.py
-```
+### Hyperparameter ablation
 
+The baseline uses lr 1e-4, dropout 0.3, L2 0.005 and 3 residual blocks. The ablation varied the learning rate, dropout, L2 strength and number of residual blocks one at a time (high/low each). Accuracy stayed within **0.68–0.70** for all 8 variants (ROC-AUC 0.93), so the model is not sensitive to these settings.
 
----
+### Key findings
 
-## 📁 Project Structure
+- Every combination that includes the image beats the image-only model. Adding geometric inputs gives a consistent gain.
+- Landmark and Z-features alone are weak, but they complement the image branch.
+- The custom residual CNN outperforms ImageNet-pretrained CNNs and transformer-based models on these 64×64 grayscale crops.
+- Disgust (40%) and Fear (51%) remain the hardest classes.
+
+## 🔍 Analysis & Interpretability
+
+- **SHAP:** per-class attributions for the image, landmark and Z-feature inputs
+- **t-SNE / UMAP:** embeddings of each branch's features on the test set
+- **Statistics:** dataset mean and standard deviation per split, t-tests of each emotion vs. the rest on landmark and Z-features, and per-emotion odds ratios with 95% CI
+
+## 📁 Repository Structure
 
 ```
 ├── README.md
-├── requirements.txt
-├── src/
-│   ├── preprocessing.py      # Face detection, landmark extraction
-│   └── train.py              # Model training and evaluation
-├── data/
-│   └── *.tfrecord            # Preprocessed data
-├── models/
-│   └── *.keras               # Saved models
+├── notebooks/
+│   ├── 01_preprocessing.ipynb        # face crop & alignment, split, augmentation, FaceMesh, Z-features → TFRecord
+│   ├── 02_train_and_compare.ipynb    # all input combinations + pretrained baselines (final results)
+│   ├── 03_transformers.ipynb         # Transformer / ViT / CLIP comparison
+│   └── 04_analysis_figures.ipynb     # dataset stats, SHAP, t-SNE/UMAP, t-tests, odds ratios, ablation
 └── results/
-    ├── *_confusion_matrix.png
-    ├── *_roc_curve.png
-    └── *_data.txt            # Performance summary
+    ├── model_performance_comparison.csv
+    └── figures/                      # proposed model: confusion matrix, ROC/PR, training curves, architecture
 ```
 
----
+## 🚀 Getting Started (Colab)
 
-## 📋 Output Files
+```python
+from google.colab import drive
+drive.mount('/content/drive')
+!pip install mediapipe
+```
 
-Each model generates:
-| File | Description |
-|------|-------------|
-| `{model}_accuracy_loss.png` | Training curves |
-| `{model}_confusion_matrix.png` | 7×7 confusion matrix |
-| `{model}_roc_curve.png` | ROC curves with AUC |
-| `{model}_data.txt` | Performance metrics summary |
-| `{model}_model.keras` | Saved model |
-
----
-
-## 🛠️ Tech Stack
-
-| Category | Technologies |
-|----------|-------------|
-| Deep Learning | TensorFlow, Keras |
-| Computer Vision | MediaPipe, OpenCV |
-| Data Processing | NumPy, Pandas |
-| Visualization | Matplotlib, Seaborn |
-| Development | Google Colab, GPU |
-
----
+The notebooks were run on a Colab GPU runtime. The dataset is not included because of the AI Hub licence terms. Request access via AI Hub and update the Drive paths in the notebooks.
 
 ## 📝 Notes
 
-- Developed and tested on Google Colab with GPU runtime
-- MediaPipe may fail on low-quality or occluded faces
-- Transfer learning models convert grayscale to RGB internally
+- MediaPipe can fail on low-quality or occluded faces. Those samples are removed during preprocessing.
+- Z-feature ratios can take large values when the mouth is closed (small denominator). Consider clipping or log-scaling them.
+- Pretrained CNNs receive the grayscale input replicated to 3 channels.
 
----
+## 👥 Team
 
-## 👥 Contributors
-
-- 2023 Undergraduate  Project
-
----
+Team project at Ewha Womans University (2023–2025). Data pipeline, modeling, experiments and analysis by Yeonjae Choi.
 
 ## 📚 References
 
-- [MediaPipe Face Mesh](https://google.github.io/mediapipe/solutions/face_mesh.html)
-- [Focal Loss for Dense Object Detection](https://arxiv.org/abs/1708.02002)
-- [Deep Residual Learning](https://arxiv.org/abs/1512.03385)
-
----
-
+- MediaPipe Face Mesh
+- Lin et al., *Focal Loss for Dense Object Detection*
+- He et al., *Deep Residual Learning for Image Recognition*
+- AI Hub, 한국인 감정인식을 위한 복합영상
