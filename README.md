@@ -13,7 +13,7 @@ The model classifies 7 emotions from a face image. It fuses three inputs:
 2. **Landmarks**: 101 key MediaPipe FaceMesh points (x, y, z → 303 features)
 3. **Z-features**: 8 geometric ratios between landmark distances, expanded to 56 features
 
-The best model, **Image + Landmark + Z**, reaches **71.8% accuracy, macro F1 0.707 and ROC-AUC 0.930** on a held-out test set of 4,742 images. That beats an image-only CNN (69.5%) and ImageNet-pretrained backbones (≤ 65.0%).
+The model was trained and evaluated on **82,843 face images** from the AI Hub Korean emotion dataset: **71,002 train**, 7,099 validation and 4,742 test. The best model, **Image + Landmark + Z**, reaches **71.8% accuracy, macro F1 0.707 and ROC-AUC 0.930** on the held-out test set. That beats an image-only CNN (69.5%) and ImageNet-pretrained backbones (≤ 65.0%).
 
 The project was originally motivated by expression-feedback tools for people with alexithymia.
 
